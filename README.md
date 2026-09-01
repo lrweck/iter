@@ -30,7 +30,7 @@ iterators, no `Next()`, no ceremony.
 ## Install
 
 ```
-go get github.com/lweck/iter
+go get github.com/lrweck/iter
 ```
 
 Needs Go 1.27.

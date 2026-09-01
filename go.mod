@@ -1,3 +1,3 @@
-module github.com/lweck/iter
+module github.com/lrweck/iter
 
 go 1.27.0
