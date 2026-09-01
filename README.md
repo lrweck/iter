@@ -1,5 +1,7 @@
 # iter
 
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/lrweck/iter)](https://pkg.go.dev/github.com/lrweck/iter)
+
 Lazy, composable, type-safe pipelines for Go 1.27 iterators — the chill
 sibling of `samber/lo`, built on range-over-func.
 
