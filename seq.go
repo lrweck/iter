@@ -27,11 +27,34 @@ type Seq[T any] struct{ seq stditer.Seq[T] }
 // Seq2 is a lazy sequence of key/value pairs.
 type Seq2[K, V any] struct{ seq stditer.Seq2[K, V] }
 
+// KeyValue is a single key/value pair, the element type of Seq2.Collect.
+type KeyValue[K, V any] struct {
+	K K
+	V V
+}
+
 // From wraps a standard iterator into a Seq.
 func From[T any](seq stditer.Seq[T]) Seq[T] { return Seq[T]{seq: seq} }
 
 // From2 wraps a standard pair iterator into a Seq2.
 func From2[K, V any](seq stditer.Seq2[K, V]) Seq2[K, V] { return Seq2[K, V]{seq: seq} }
+
+// emptySeq returns a lazy sequence that yields nothing. It is the value the
+// defensive nil guards produce so a zero-value Seq flows through a pipeline
+// without panicking.
+func emptySeq[T any]() Seq[T] {
+	return From(func(func(T) bool) { return })
+}
+
+// emptySeq2 returns a lazy pair sequence that yields nothing.
+func emptySeq2[K, V any]() Seq2[K, V] {
+	return From2(func(func(K, V) bool) { return })
+}
+
+// emptyResult returns a lazy fallible sequence that yields nothing.
+func emptyResult[V any]() Result[V] {
+	return FromResult(func(func(V, error) bool) { return })
+}
 
 // Of builds a Seq from its arguments.
 func Of[T any](vals ...T) Seq[T] { return From(slices.Values(vals)) }
@@ -41,12 +64,33 @@ func Of[T any](vals ...T) Seq[T] { return From(slices.Values(vals)) }
 //	for v := range seq.Seq() { ... }
 func (s Seq[T]) Seq() stditer.Seq[T] { return s.seq }
 
-// Range yields from up to, but not including, to, stepping by 1.
-func Range(from, to int) Seq[int] {
+// iter returns an iterator safe to range over: a zero-value Seq yields
+// nothing instead of panic.
+func (s Seq[T]) iter() stditer.Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]().seq
+	}
+	return s.seq
+}
+
+// Range yields from up to, but not including, to, stepping by step.
+// It panics if step is zero or has the wrong sign.
+func Range(from, to, step int) Seq[int] {
+	if step == 0 {
+		panic("iter: zero step")
+	}
 	return From(func(yield func(int) bool) {
-		for i := from; i < to; i++ {
-			if !yield(i) {
-				return
+		if step > 0 {
+			for i := from; i < to; i += step {
+				if !yield(i) {
+					return
+				}
+			}
+		} else {
+			for i := from; i > to; i += step {
+				if !yield(i) {
+					return
+				}
 			}
 		}
 	})
@@ -78,7 +122,7 @@ func RepeatBy[T any](n int, f func(int) T) Seq[T] {
 func Concat[T any](seqs ...Seq[T]) Seq[T] {
 	return From(func(yield func(T) bool) {
 		for _, s := range seqs {
-			for v := range s.seq {
+			for v := range s.iter() {
 				if !yield(v) {
 					return
 				}
@@ -89,6 +133,9 @@ func Concat[T any](seqs ...Seq[T]) Seq[T] {
 
 // Map applies f to each element.
 func (s Seq[T]) Map[U any](f func(T) U) Seq[U] {
+	if s.seq == nil {
+		return emptySeq[U]()
+	}
 	return From(func(yield func(U) bool) {
 		for v := range s.seq {
 			if !yield(f(v)) {
@@ -102,6 +149,9 @@ func (s Seq[T]) Map[U any](f func(T) U) Seq[U] {
 // success, (zero, err) on failure. The error pairs never stop the pipeline;
 // handling them is up to the consumer (IgnoreErr, Errors, CollectErr).
 func (s Seq[T]) MapErr[U any](f func(T) (U, error)) Result[U] {
+	if s.seq == nil {
+		return emptyResult[U]()
+	}
 	return FromResult(func(yield func(U, error) bool) {
 		for v := range s.seq {
 			u, err := f(v)
@@ -120,6 +170,9 @@ func (s Seq[T]) MapErr[U any](f func(T) (U, error)) Result[U] {
 
 // Filter keeps elements for which f returns true.
 func (s Seq[T]) Filter(f func(T) bool) Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]()
+	}
 	return From(func(yield func(T) bool) {
 		for v := range s.seq {
 			if f(v) && !yield(v) {
@@ -132,6 +185,9 @@ func (s Seq[T]) Filter(f func(T) bool) Seq[T] {
 // SkipErr keeps elements for which check returns nil, skipping the failures
 // and moving on to the next one.
 func (s Seq[T]) SkipErr(check func(T) error) Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]()
+	}
 	return From(func(yield func(T) bool) {
 		for v := range s.seq {
 			if check(v) != nil {
@@ -146,9 +202,12 @@ func (s Seq[T]) SkipErr(check func(T) error) Seq[T] {
 
 // FlatMap concatenates the sequences produced by f.
 func (s Seq[T]) FlatMap[U any](f func(T) Seq[U]) Seq[U] {
+	if s.seq == nil {
+		return emptySeq[U]()
+	}
 	return From(func(yield func(U) bool) {
 		for v := range s.seq {
-			for u := range f(v).seq {
+			for u := range f(v).iter() {
 				if !yield(u) {
 					return
 				}
@@ -160,6 +219,9 @@ func (s Seq[T]) FlatMap[U any](f func(T) Seq[U]) Seq[U] {
 // FlatMapErr is FlatMap with an error source: each element produces either a
 // run of (result, nil) pairs or a single (zero, err) pair.
 func (s Seq[T]) FlatMapErr[U any](f func(T) (Seq[U], error)) Result[U] {
+	if s.seq == nil {
+		return emptyResult[U]()
+	}
 	return FromResult(func(yield func(U, error) bool) {
 		for v := range s.seq {
 			sub, err := f(v)
@@ -169,7 +231,7 @@ func (s Seq[T]) FlatMapErr[U any](f func(T) (Seq[U], error)) Result[U] {
 				}
 				continue
 			}
-			for u := range sub.seq {
+			for u := range sub.iter() {
 				if !yield(u, nil) {
 					return
 				}
@@ -180,6 +242,9 @@ func (s Seq[T]) FlatMapErr[U any](f func(T) (Seq[U], error)) Result[U] {
 
 // Take keeps at most n elements.
 func (s Seq[T]) Take(n int) Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]()
+	}
 	return From(func(yield func(T) bool) {
 		for v := range s.seq {
 			if n <= 0 {
@@ -195,6 +260,9 @@ func (s Seq[T]) Take(n int) Seq[T] {
 
 // Drop discards the first n elements.
 func (s Seq[T]) Drop(n int) Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]()
+	}
 	return From(func(yield func(T) bool) {
 		for v := range s.seq {
 			if n > 0 {
@@ -210,6 +278,9 @@ func (s Seq[T]) Drop(n int) Seq[T] {
 
 // TakeWhile yields elements from the start while pred is true.
 func (s Seq[T]) TakeWhile(pred func(T) bool) Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]()
+	}
 	return From(func(yield func(T) bool) {
 		for v := range s.seq {
 			if !pred(v) {
@@ -224,6 +295,9 @@ func (s Seq[T]) TakeWhile(pred func(T) bool) Seq[T] {
 
 // DropWhile discards elements from the start while pred is true.
 func (s Seq[T]) DropWhile(pred func(T) bool) Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]()
+	}
 	return From(func(yield func(T) bool) {
 		drop := true
 		for v := range s.seq {
@@ -242,6 +316,9 @@ func (s Seq[T]) DropWhile(pred func(T) bool) Seq[T] {
 // It is the Go counterpart of Elixir's |> tap/2: a hook for logging and
 // side effects in the middle of a pipeline.
 func (s Seq[T]) Tap(f func(T)) Seq[T] {
+	if s.seq == nil {
+		return emptySeq[T]()
+	}
 	return From(func(yield func(T) bool) {
 		for v := range s.seq {
 			f(v)
@@ -264,7 +341,7 @@ func Chunk[T any](s Seq[T], n int) Seq[[]T] {
 	}
 	return From(func(yield func([]T) bool) {
 		var chunk []T
-		for v := range s.seq {
+		for v := range s.iter() {
 			chunk = append(chunk, v)
 			if len(chunk) == n {
 				if !yield(chunk) {

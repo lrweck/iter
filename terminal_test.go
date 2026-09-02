@@ -68,23 +68,23 @@ func TestReduce(t *testing.T) {
 	}
 }
 
-func TestEach(t *testing.T) {
+func TestForEach(t *testing.T) {
 	tests := []struct {
 		name string
 		run  func(*testing.T)
 	}{
 		{"sum", func(t *testing.T) {
 			sum := 0
-			Of(1, 2, 3).Each(func(v int) { sum += v })
+			Of(1, 2, 3).ForEach(func(v int) { sum += v })
 			if sum != 6 {
-				t.Fatalf("Each summed to %d, want 6", sum)
+				t.Fatalf("ForEach summed to %d, want 6", sum)
 			}
 		}},
 		{"empty", func(t *testing.T) {
 			sum := 0
-			Of[int]().Each(func(v int) { sum += v })
+			Of[int]().ForEach(func(v int) { sum += v })
 			if sum != 0 {
-				t.Fatalf("Each summed to %d, want 0", sum)
+				t.Fatalf("ForEach summed to %d, want 0", sum)
 			}
 		}},
 	}
@@ -208,10 +208,10 @@ func TestReduceErr(t *testing.T) {
 		name string
 		run  func(*testing.T)
 	}{
-		{"first error kept", func(t *testing.T) {
+		{"stops on first error", func(t *testing.T) {
 			acc, err := Of(1, 2, 3).ReduceErr(0, failOnTwo)
-			if acc != 4 {
-				t.Fatalf("ReduceErr acc=%d, want 4", acc)
+			if acc != 0 {
+				t.Fatalf("ReduceErr acc=%d, want 0 (zero value)", acc)
 			}
 			if !errors.Is(err, errSentinel) {
 				t.Fatalf("ReduceErr err=%v, want sentinel", err)
@@ -221,6 +221,15 @@ func TestReduceErr(t *testing.T) {
 			acc, err := Of(3).ReduceErr(0, failOnTwo)
 			if acc != 3 {
 				t.Fatalf("ReduceErr acc=%d, want 3", acc)
+			}
+			if err != nil {
+				t.Fatalf("ReduceErr err=%v, want nil", err)
+			}
+		}},
+		{"no elements", func(t *testing.T) {
+			acc, err := Of[int]().ReduceErr(0, failOnTwo)
+			if acc != 0 {
+				t.Fatalf("ReduceErr acc=%d, want 0", acc)
 			}
 			if err != nil {
 				t.Fatalf("ReduceErr err=%v, want nil", err)

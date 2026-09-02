@@ -17,6 +17,22 @@ import (
 // parameters).
 type Result[V any] struct{ seq stditer.Seq2[V, error] }
 
+// Setup: Seq2 and Result iterators safe on the zero value.
+
+func (s Seq2[K, V]) iter() stditer.Seq2[K, V] {
+	if s.seq == nil {
+		return emptySeq2[K, V]().seq
+	}
+	return s.seq
+}
+
+func (s Result[V]) iter() stditer.Seq2[V, error] {
+	if s.seq == nil {
+		return emptyResult[V]().seq
+	}
+	return s.seq
+}
+
 // FromResult wraps a standard pair iterator as a fallible sequence.
 func FromResult[V any](seq stditer.Seq2[V, error]) Result[V] { return Result[V]{seq: seq} }
 
@@ -31,6 +47,9 @@ func FromValues[K comparable, V any](m map[K]V) Seq[V] { return From(maps.Values
 
 // Enumerate pairs each element with its index.
 func (s Seq[T]) Enumerate() Seq2[int, T] {
+	if s.seq == nil {
+		return emptySeq2[int, T]()
+	}
 	return From2(func(yield func(int, T) bool) {
 		i := 0
 		for v := range s.seq {
@@ -45,8 +64,11 @@ func (s Seq[T]) Enumerate() Seq2[int, T] {
 // Zip pairs each element with the corresponding element of o, stopping at the
 // shorter sequence.
 func (s Seq[T]) Zip[U any](o Seq[U]) Seq2[T, U] {
+	if s.seq == nil {
+		return emptySeq2[T, U]()
+	}
 	return From2(func(yield func(T, U) bool) {
-		next, stop := stditer.Pull(o.seq)
+		next, stop := stditer.Pull(o.iter())
 		defer stop()
 		for v := range s.seq {
 			u, ok := next()
@@ -63,6 +85,9 @@ func (s Seq[T]) Zip[U any](o Seq[U]) Seq2[T, U] {
 // Tap inspects every pair as it flows through, then yields it unchanged; see
 // Seq.Tap.
 func (s Seq2[K, V]) Tap(f func(K, V)) Seq2[K, V] {
+	if s.seq == nil {
+		return emptySeq2[K, V]()
+	}
 	return From2(func(yield func(K, V) bool) {
 		for k, v := range s.seq {
 			f(k, v)
@@ -75,6 +100,9 @@ func (s Seq2[K, V]) Tap(f func(K, V)) Seq2[K, V] {
 
 // Keys yields the keys of a pair sequence.
 func (s Seq2[K, V]) Keys() Seq[K] {
+	if s.seq == nil {
+		return emptySeq[K]()
+	}
 	return From(func(yield func(K) bool) {
 		for k := range s.seq {
 			if !yield(k) {
@@ -86,6 +114,9 @@ func (s Seq2[K, V]) Keys() Seq[K] {
 
 // Values yields the values of a pair sequence.
 func (s Seq2[K, V]) Values() Seq[V] {
+	if s.seq == nil {
+		return emptySeq[V]()
+	}
 	return From(func(yield func(V) bool) {
 		for _, v := range s.seq {
 			if !yield(v) {
@@ -103,15 +134,116 @@ func (s Seq2[K, V]) Seq() stditer.Seq2[K, V] { return s.seq }
 // Count returns the number of pairs.
 func (s Seq2[K, V]) Count() int {
 	n := 0
-	for range s.seq {
+	for range s.iter() {
 		n++
 	}
 	return n
 }
 
+// Filter keeps the pairs for which f returns true.
+func (s Seq2[K, V]) Filter(f func(K, V) bool) Seq2[K, V] {
+	if s.seq == nil {
+		return emptySeq2[K, V]()
+	}
+	return From2(func(yield func(K, V) bool) {
+		for k, v := range s.seq {
+			if f(k, v) && !yield(k, v) {
+				return
+			}
+		}
+	})
+}
+
+// Take keeps at most n pairs.
+func (s Seq2[K, V]) Take(n int) Seq2[K, V] {
+	if s.seq == nil {
+		return emptySeq2[K, V]()
+	}
+	return From2(func(yield func(K, V) bool) {
+		for k, v := range s.seq {
+			if n <= 0 {
+				return
+			}
+			n--
+			if !yield(k, v) {
+				return
+			}
+		}
+	})
+}
+
+// Drop discards the first n pairs.
+func (s Seq2[K, V]) Drop(n int) Seq2[K, V] {
+	if s.seq == nil {
+		return emptySeq2[K, V]()
+	}
+	return From2(func(yield func(K, V) bool) {
+		for k, v := range s.seq {
+			if n > 0 {
+				n--
+				continue
+			}
+			if !yield(k, v) {
+				return
+			}
+		}
+	})
+}
+
+// TakeWhile yields pairs from the start while pred is true.
+func (s Seq2[K, V]) TakeWhile(pred func(K, V) bool) Seq2[K, V] {
+	if s.seq == nil {
+		return emptySeq2[K, V]()
+	}
+	return From2(func(yield func(K, V) bool) {
+		for k, v := range s.seq {
+			if !pred(k, v) {
+				return
+			}
+			if !yield(k, v) {
+				return
+			}
+		}
+	})
+}
+
+// DropWhile discards pairs from the start while pred is true.
+func (s Seq2[K, V]) DropWhile(pred func(K, V) bool) Seq2[K, V] {
+	if s.seq == nil {
+		return emptySeq2[K, V]()
+	}
+	return From2(func(yield func(K, V) bool) {
+		drop := true
+		for k, v := range s.seq {
+			if drop && pred(k, v) {
+				continue
+			}
+			drop = false
+			if !yield(k, v) {
+				return
+			}
+		}
+	})
+}
+
+// Collect eagerly evaluates the pair sequence into a slice of KeyValue pairs.
+func (s Seq2[K, V]) Collect() []KeyValue[K, V] {
+	if s.seq == nil {
+		return nil
+	}
+	var out []KeyValue[K, V]
+	for k, v := range s.seq {
+		out = append(out, KeyValue[K, V]{K: k, V: v})
+	}
+	return out
+}
+
 // Tap inspects every outcome as it flows through, then yields it unchanged.
 // This is where fallible pipelines log their errors.
 func (s Result[V]) Tap(f func(V, error)) Result[V] {
+	if s.seq == nil {
+		return emptyResult[V]()
+	}
 	return FromResult(func(yield func(V, error) bool) {
 		for v, err := range s.seq {
 			f(v, err)
@@ -124,6 +256,9 @@ func (s Result[V]) Tap(f func(V, error)) Result[V] {
 
 // Take keeps at most n outcome pairs, stopping the upstream pull that early.
 func (s Result[V]) Take(n int) Result[V] {
+	if s.seq == nil {
+		return emptyResult[V]()
+	}
 	return FromResult(func(yield func(V, error) bool) {
 		for v, err := range s.seq {
 			if n <= 0 {
@@ -139,6 +274,9 @@ func (s Result[V]) Take(n int) Result[V] {
 
 // Filter keeps the outcome pairs for which f returns true.
 func (s Result[V]) Filter(f func(V, error) bool) Result[V] {
+	if s.seq == nil {
+		return emptyResult[V]()
+	}
 	return FromResult(func(yield func(V, error) bool) {
 		for v, err := range s.seq {
 			if f(v, err) && !yield(v, err) {
@@ -151,6 +289,9 @@ func (s Result[V]) Filter(f func(V, error) bool) Result[V] {
 // IgnoreErr drops the error pairs and yields only the successful values as a
 // plain sequence from here on: the errors are skipped and the value is kept.
 func (s Result[V]) IgnoreErr() Seq[V] {
+	if s.seq == nil {
+		return emptySeq[V]()
+	}
 	return From(func(yield func(V) bool) {
 		for v, err := range s.seq {
 			if err == nil && !yield(v) {
@@ -162,6 +303,9 @@ func (s Result[V]) IgnoreErr() Seq[V] {
 
 // Errors yields the error of each failed pair, for logging or counting.
 func (s Result[V]) Errors() Seq[error] {
+	if s.seq == nil {
+		return emptySeq[error]()
+	}
 	return From(func(yield func(error) bool) {
 		for _, err := range s.seq {
 			if err != nil && !yield(err) {
@@ -177,7 +321,7 @@ func (s Result[V]) Errors() Seq[error] {
 func (s Result[V]) CollectErr() ([]V, error) {
 	var vals []V
 	var errs []error
-	for v, err := range s.seq {
+	for v, err := range s.iter() {
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -190,7 +334,7 @@ func (s Result[V]) CollectErr() ([]V, error) {
 // Count returns the number of outcome pairs.
 func (s Result[V]) Count() int {
 	n := 0
-	for range s.seq {
+	for range s.iter() {
 		n++
 	}
 	return n
@@ -202,4 +346,4 @@ func (s Result[V]) Count() int {
 func (s Result[V]) Seq() stditer.Seq2[V, error] { return s.seq }
 
 // ToMap eagerly collects a pair sequence into a map.
-func ToMap[K comparable, V any](s Seq2[K, V]) map[K]V { return maps.Collect(s.seq) }
+func ToMap[K comparable, V any](s Seq2[K, V]) map[K]V { return maps.Collect(s.iter()) }

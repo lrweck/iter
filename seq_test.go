@@ -16,6 +16,10 @@ func TestMap(t *testing.T) {
 		{"empty", func(t *testing.T) {
 			checkEqual(t, Of[int]().Map(func(v int) int { return v * v }).Collect(), nil)
 		}},
+		{"nil receiver", func(t *testing.T) {
+			var s Seq[int]
+			checkEqual(t, s.Map(func(v int) int { return v * v }).Collect(), nil)
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, tt.run)
@@ -32,6 +36,10 @@ func TestFilter(t *testing.T) {
 		}},
 		{"none kept", func(t *testing.T) {
 			checkEqual(t, Of(1, 3).Filter(func(v int) bool { return v%2 == 0 }).Collect(), nil)
+		}},
+		{"nil receiver", func(t *testing.T) {
+			var s Seq[int]
+			checkEqual(t, s.Filter(func(v int) bool { return v%2 == 0 }).Collect(), nil)
 		}},
 	}
 	for _, tt := range tests {
@@ -148,6 +156,12 @@ func TestChunk(t *testing.T) {
 				t.Fatalf("chunks got %v, want nil", got)
 			}
 		}},
+		{"chunk of one", func(t *testing.T) {
+			got := Chunk(Of(1, 2, 3), 1).Collect()
+			if !slices.EqualFunc(got, [][]int{{1}, {2}, {3}}, eq) {
+				t.Fatalf("chunks got %v, want [[1] [2] [3]]", got)
+			}
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, tt.run)
@@ -165,6 +179,10 @@ func TestSeq(t *testing.T) {
 				got = append(got, v)
 			}
 			checkEqual(t, got, []int{1, 2, 3})
+		}},
+		{"nil Seq is empty", func(t *testing.T) {
+			var s Seq[int]
+			checkEqual(t, s.Collect(), nil)
 		}},
 	}
 	for _, tt := range tests {
@@ -206,10 +224,30 @@ func TestGenerators(t *testing.T) {
 		run  func(*testing.T)
 	}{
 		{"range", func(t *testing.T) {
-			checkEqual(t, Range(2, 5).Collect(), []int{2, 3, 4})
+			checkEqual(t, Range(2, 5, 1).Collect(), []int{2, 3, 4})
 		}},
 		{"range empty", func(t *testing.T) {
-			checkEqual(t, Range(3, 3).Collect(), nil)
+			checkEqual(t, Range(3, 3, 1).Collect(), nil)
+		}},
+		{"range step 2", func(t *testing.T) {
+			checkEqual(t, Range(0, 10, 2).Collect(), []int{0, 2, 4, 6, 8})
+		}},
+		{"range negative step", func(t *testing.T) {
+			checkEqual(t, Range(5, 1, -1).Collect(), []int{5, 4, 3, 2})
+		}},
+		{"range negative step 2", func(t *testing.T) {
+			checkEqual(t, Range(10, 0, -3).Collect(), []int{10, 7, 4, 1})
+		}},
+		{"range empty by step", func(t *testing.T) {
+			checkEqual(t, Range(0, 10, -1).Collect(), nil)
+		}},
+		{"range panics on zero step", func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Fatal("Range with step=0 did not panic")
+				}
+			}()
+			Range(0, 10, 0)
 		}},
 		{"repeat", func(t *testing.T) {
 			checkEqual(t, Repeat(3, 7).Collect(), []int{7, 7, 7})
@@ -296,6 +334,15 @@ func TestStops(t *testing.T) {
 			}
 			checkStops(t, n)
 		}},
+		{"seq2 filter", func(t *testing.T) {
+			checkStops(t, Of(1, 2, 3).Enumerate().Filter(func(k, v int) bool { return v > 1 }).Take(1).Count())
+		}},
+		{"seq2 take", func(t *testing.T) {
+			checkStops(t, Of(1, 2, 3).Enumerate().Take(1).Count())
+		}},
+		{"seq2 drop", func(t *testing.T) {
+			checkStops(t, Of(1, 2, 3).Enumerate().Drop(2).Take(1).Count())
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, tt.run)
@@ -310,8 +357,6 @@ func checkStops(t *testing.T, n int) {
 }
 
 func TestLazy(t *testing.T) {
-	// Push iterators run one element ahead: Take(2) lets Map compute v=3
-	// before refusing it. The upstream must stop after that first refusal.
 	calls := 0
 	Of(1, 2, 3, 4, 5).Map(func(v int) int {
 		calls++
@@ -321,7 +366,6 @@ func TestLazy(t *testing.T) {
 		t.Fatalf("Map ran %d times, want 3", calls)
 	}
 
-	// Filter keeps computing one element past the consumer's cut.
 	fcalls := 0
 	Of(1, 2, 3, 4).Filter(func(v int) bool {
 		fcalls++
@@ -330,4 +374,26 @@ func TestLazy(t *testing.T) {
 	if fcalls != 4 {
 		t.Fatalf("Filter ran %d times, want 4", fcalls)
 	}
+}
+
+func TestNilReceiver(t *testing.T) {
+	var s Seq[int]
+
+	// All pipeline methods should return empty, not panic.
+	checkEqual(t, s.Map(func(v int) int { return v * 2 }).Collect(), nil)
+	checkEqual(t, s.Filter(func(v int) bool { return true }).Collect(), nil)
+	checkEqual(t, s.FlatMap(func(v int) Seq[int] { return Of(v) }).Collect(), nil)
+	checkEqual(t, s.Take(5).Collect(), nil)
+	checkEqual(t, s.Drop(2).Collect(), nil)
+	checkEqual(t, s.TakeWhile(func(v int) bool { return true }).Collect(), nil)
+	checkEqual(t, s.DropWhile(func(v int) bool { return false }).Collect(), nil)
+	checkEqual(t, s.SkipErr(func(int) error { return nil }).Collect(), nil)
+	checkEqual(t, s.Tap(func(int) {}).Collect(), nil)
+
+	// Enumerate, Zip, MapErr, FlatMapErr.
+	checkEqual(t, s.Enumerate().Keys().Collect(), nil)
+	checkEqual(t, s.Enumerate().Values().Collect(), nil)
+	checkEqual(t, s.Zip(Of(1)).Keys().Collect(), nil)
+	checkEqual(t, s.MapErr(func(v int) (int, error) { return v, nil }).IgnoreErr().Collect(), nil)
+	checkEqual(t, s.FlatMapErr(func(v int) (Seq[int], error) { return Of(v), nil }).Errors().Collect(), []error{})
 }

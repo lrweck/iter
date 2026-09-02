@@ -44,7 +44,7 @@ Needs Go 1.27.
 | `Map(f)` | Apply `f` to every element |
 | `Filter(f)` | Keep elements where `f` is true |
 | `SkipErr(check)` | Keep elements where `check` returns nil, skip the rest |
-| `UniqByFunc(key)` | Keep the first element of each equal key (any `T`) |
+| `UniqBy(key)` | Keep the first element of each distinct key (any `T`) |
 | `FlatMap(f)` | Flatten the sequences produced by `f` |
 | `Take(n)` / `Drop(n)` | Keep / drop the first `n` elements |
 | `TakeWhile(p)` / `DropWhile(p)` | Keep / drop elements while `p` is true |
@@ -52,12 +52,16 @@ Needs Go 1.27.
 | `Enumerate()` | Attach an index → `Seq2[int, T]` |
 | `Zip(o)` | Pair up corresponding elements of two sequences |
 
+`Seq2` (the output of `Enumerate` / `Zip`) shares the pipeline: `Filter`,
+`Take`, `Drop`, `TakeWhile`, `DropWhile`, `Tap`, plus `Keys`, `Values`,
+`Collect`, and `ToMap`.
+
 When the element type needs a constraint a method can't apply, you get a
 package function — same vibe, shorter stack:
 
 ```go
 iter.Uniq(iter.Of(1, 2, 2, 1))                        // []int{1, 2}
-iter.Of(users).UniqByFunc(func(u user) int { return u.id })
+iter.Of(users).UniqBy(func(u user) int { return u.id })
 ```
 
 The tail of the pipeline:
@@ -68,18 +72,19 @@ first, ok := iter.Of(9, 8).First()                          // 9, true
 last, ok := iter.Of(9, 8).Last()                            // 8, true
 total := iter.Sum(iter.Of(1, 2, 3))                         // 6
 best, ok := iter.Max(iter.Of(3, 1, 4))                      // 4, true
-pop, ok := iter.Of(users).MaxByFunc(func(u user) int { return u.age })
+pop, ok := iter.Of(users).MaxBy(func(u user) int { return u.age })
 pairs := iter.ToMap(iter.Of("a", "b").Enumerate())          // map[int]string
-buckets := iter.Of(vals).GroupByFunc(func(v int) string { return ... })
-pick := iter.Of(vals).KeyByFunc(func(v int) string { return ... })
+buckets := iter.Of(vals).GroupBy(func(v int) string { return ... })
+pick := iter.Of(vals).KeyBy(func(v int) string { return ... })
 ```
 
 Generators:
 
 ```go
-iter.Range(2, 5).Collect()                                                 // []int{2, 3, 4}
-iter.Repeat(3, "x").Collect()                                              // []string{"x", "x", "x"}
-iter.RepeatBy(3, func(i int) int { return i * i }).Collect()               // []int{0, 1, 4}
+iter.Range(2, 5, 1).Collect()                                                // []int{2, 3, 4}
+iter.Range(5, 1, -1).Collect()                                               // []int{5, 4, 3, 2}
+iter.Repeat(3, "x").Collect()                                                // []string{"x", "x", "x"}
+iter.RepeatBy(3, func(i int) int { return i * i }).Collect()                 // []int{0, 1, 4}
 iter.From(slices.Values([]string{"a", "b"}))                               // wrap any stdlib iterator
 iter.Concat(iter.Of(1), iter.Of(2, 3)).Collect()                         // []int{1, 2, 3}
 iter.Contains(iter.Of(3, 1, 4), 4)                                       // true
@@ -132,14 +137,16 @@ fall off the method set because of it:
 
 - `Sum` / `Max` / `Min` / `Uniq` need numeric, ordered, or comparable
   element types, so they're package functions. Their keyed counterparts —
-  `SumByFunc` / `MaxByFunc` / `MinByFunc` / `UniqByFunc` / `KeyByFunc` /
-  `GroupByFunc` — shove the constraint onto the key and work as methods for
-  any `T`.
+  `SumBy` / `MaxBy` / `MinBy` / `UniqBy` / `KeyBy` / `GroupBy` — shove the
+  constraint onto the key and work as methods for any `T`.
 - `Chunk` returns `Seq[[]T]`, and the compiler chases `T → []T → ...` through
   the method set until it gives up.
 - Error recovery pins the pair slot to `error`, which generic `Seq2` methods
   can't say — so there's a dedicated `Result[V]` type whose methods (`Take`,
   `Filter`, `IgnoreErr`, `Errors`, `CollectErr`, `Tap`) speak error fluently.
+
+Zero values are safe: a `Seq`, `Seq2`, or `Result` declared but never
+initialized behaves as an empty sequence.
 
 ## License
 

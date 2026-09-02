@@ -16,16 +16,16 @@ type Number interface {
 // Sum adds all elements. The empty sequence sums to zero.
 func Sum[T Number](s Seq[T]) T {
 	var total T
-	for v := range s.seq {
+	for v := range s.iter() {
 		total += v
 	}
 	return total
 }
 
-// SumByFunc sums the keys produced by key. The empty sequence sums to zero.
-func (s Seq[T]) SumByFunc[K Number](key func(T) K) K {
+// SumBy sums the keys produced by key. The empty sequence sums to zero.
+func (s Seq[T]) SumBy[K Number](key func(T) K) K {
 	var total K
-	for v := range s.seq {
+	for v := range s.iter() {
 		total += key(v)
 	}
 	return total
@@ -35,7 +35,7 @@ func (s Seq[T]) SumByFunc[K Number](key func(T) K) K {
 func Max[T cmp.Ordered](s Seq[T]) (T, bool) {
 	var best T
 	ok := false
-	for v := range s.seq {
+	for v := range s.iter() {
 		if !ok || cmp.Less(best, v) {
 			best, ok = v, true
 		}
@@ -43,13 +43,13 @@ func Max[T cmp.Ordered](s Seq[T]) (T, bool) {
 	return best, ok
 }
 
-// MaxByFunc returns the element with the greatest key, or ok=false if the
+// MaxBy returns the element with the greatest key, or ok=false if the
 // sequence is empty.
-func (s Seq[T]) MaxByFunc[K cmp.Ordered](key func(T) K) (T, bool) {
+func (s Seq[T]) MaxBy[K cmp.Ordered](key func(T) K) (T, bool) {
 	var best T
 	var bestKey K
 	ok := false
-	for v := range s.seq {
+	for v := range s.iter() {
 		k := key(v)
 		if !ok || cmp.Less(bestKey, k) {
 			best, bestKey, ok = v, k, true
@@ -62,7 +62,7 @@ func (s Seq[T]) MaxByFunc[K cmp.Ordered](key func(T) K) (T, bool) {
 func Min[T cmp.Ordered](s Seq[T]) (T, bool) {
 	var best T
 	ok := false
-	for v := range s.seq {
+	for v := range s.iter() {
 		if !ok || cmp.Less(v, best) {
 			best, ok = v, true
 		}
@@ -70,13 +70,13 @@ func Min[T cmp.Ordered](s Seq[T]) (T, bool) {
 	return best, ok
 }
 
-// MinByFunc returns the element with the least key, or ok=false if the
+// MinBy returns the element with the least key, or ok=false if the
 // sequence is empty.
-func (s Seq[T]) MinByFunc[K cmp.Ordered](key func(T) K) (T, bool) {
+func (s Seq[T]) MinBy[K cmp.Ordered](key func(T) K) (T, bool) {
 	var best T
 	var bestKey K
 	ok := false
-	for v := range s.seq {
+	for v := range s.iter() {
 		k := key(v)
 		if !ok || cmp.Less(k, bestKey) {
 			best, bestKey, ok = v, k, true

@@ -36,6 +36,18 @@ func TestEnumerate(t *testing.T) {
 			checkEqual(t, vs, nil)
 			checkEqual(t, en.Values().Collect(), nil)
 		}},
+		{"nil receiver", func(t *testing.T) {
+			var s Seq[string]
+			en := s.Enumerate()
+			var ks []int
+			var vs []string
+			for k, v := range en.Seq() {
+				ks = append(ks, k)
+				vs = append(vs, v)
+			}
+			checkEqual(t, ks, nil)
+			checkEqual(t, vs, nil)
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, tt.run)
@@ -324,4 +336,83 @@ func TestRSeq(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, tt.run)
 	}
+}
+
+func TestSeq2NilReceiver(t *testing.T) {
+	var s Seq2[int, int]
+
+	checkEqual(t, s.Keys().Collect(), nil)
+	checkEqual(t, s.Values().Collect(), nil)
+	if s.Count() != 0 {
+		t.Fatal("nil Seq2 Count should be 0")
+	}
+	checkEqual(t, s.Collect(), nil)
+
+	// Pipeline methods on nil Seq2 produce empty, harmless results.
+	checkEqual(t, s.Filter(func(k, v int) bool { return true }).Keys().Collect(), nil)
+	checkEqual(t, s.Tap(func(k, v int) {}).Values().Collect(), nil)
+	checkEqual(t, s.Take(5).Keys().Collect(), nil)
+	checkEqual(t, s.Drop(1).Keys().Collect(), nil)
+	checkEqual(t, s.TakeWhile(func(k, v int) bool { return true }).Keys().Collect(), nil)
+	checkEqual(t, s.DropWhile(func(k, v int) bool { return false }).Keys().Collect(), nil)
+}
+
+func TestSeq2Collect(t *testing.T) {
+	got := Of("a", "b").Enumerate().Collect()
+	if len(got) != 2 {
+		t.Fatalf("Collect got %d pairs, want 2", len(got))
+	}
+	if got[0].K != 0 || got[0].V != "a" {
+		t.Fatalf("Collect first pair got %v, want {0, a}", got[0])
+	}
+	if got[1].K != 1 || got[1].V != "b" {
+		t.Fatalf("Collect second pair got %v, want {1, b}", got[1])
+	}
+}
+
+func TestSeq2FilterTakeDrop(t *testing.T) {
+	en := Of(1, 2, 3, 4).Enumerate()
+
+	// Filter: keep even values.
+	evens := en.Filter(func(k, v int) bool { return v%2 == 0 })
+	evensK, evensV := collectKVs(evens)
+	checkEqual(t, evensK, []int{1, 3})
+	checkEqual(t, evensV, []int{2, 4})
+
+	// Take first 2 pairs.
+	en2 := Of(1, 2, 3, 4).Enumerate()
+	taken := en2.Take(2)
+	takenK, takenV := collectKVs(taken)
+	checkEqual(t, takenK, []int{0, 1})
+	checkEqual(t, takenV, []int{1, 2})
+
+	// Drop first 2 pairs.
+	en3 := Of(1, 2, 3, 4).Enumerate()
+	dropped := en3.Drop(2)
+	droppedK, droppedV := collectKVs(dropped)
+	checkEqual(t, droppedK, []int{2, 3})
+	checkEqual(t, droppedV, []int{3, 4})
+}
+
+func TestSeq2TakeWhileDropWhile(t *testing.T) {
+	en := Of(1, 2, 3, 4, 1).Enumerate()
+	taken := en.TakeWhile(func(k, v int) bool { return v < 3 })
+	takenK, takenV := collectKVs(taken)
+	checkEqual(t, takenK, []int{0, 1})
+	checkEqual(t, takenV, []int{1, 2})
+
+	en2 := Of(1, 2, 3, 4, 1).Enumerate()
+	dropped := en2.DropWhile(func(k, v int) bool { return v < 3 })
+	droppedK, droppedV := collectKVs(dropped)
+	checkEqual(t, droppedK, []int{2, 3, 4})
+	checkEqual(t, droppedV, []int{3, 4, 1})
+}
+
+func collectKVs(s Seq2[int, int]) ([]int, []int) {
+	var ks, vs []int
+	for k, v := range s.Seq() {
+		ks = append(ks, k)
+		vs = append(vs, v)
+	}
+	return ks, vs
 }
