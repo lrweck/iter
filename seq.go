@@ -74,7 +74,8 @@ func (s Seq[T]) iter() stditer.Seq[T] {
 }
 
 // Range yields from up to, but not including, to, stepping by step.
-// It panics if step is zero or has the wrong sign.
+// It panics if step is zero. If step has the wrong sign for the direction
+// from from to to, it yields nothing.
 func Range(from, to, step int) Seq[int] {
 	if step == 0 {
 		panic("iter: zero step")

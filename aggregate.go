@@ -16,7 +16,7 @@ type Number interface {
 // Sum adds all elements. The empty sequence sums to zero.
 func Sum[T Number](s Seq[T]) T {
 	var total T
-	for v := range s.iter() {
+	for v := range s.seq {
 		total += v
 	}
 	return total
@@ -25,7 +25,7 @@ func Sum[T Number](s Seq[T]) T {
 // SumBy sums the keys produced by key. The empty sequence sums to zero.
 func (s Seq[T]) SumBy[K Number](key func(T) K) K {
 	var total K
-	for v := range s.iter() {
+	for v := range s.seq {
 		total += key(v)
 	}
 	return total
@@ -35,7 +35,7 @@ func (s Seq[T]) SumBy[K Number](key func(T) K) K {
 func Max[T cmp.Ordered](s Seq[T]) (T, bool) {
 	var best T
 	ok := false
-	for v := range s.iter() {
+	for v := range s.seq {
 		if !ok || cmp.Less(best, v) {
 			best, ok = v, true
 		}
@@ -49,7 +49,7 @@ func (s Seq[T]) MaxBy[K cmp.Ordered](key func(T) K) (T, bool) {
 	var best T
 	var bestKey K
 	ok := false
-	for v := range s.iter() {
+	for v := range s.seq {
 		k := key(v)
 		if !ok || cmp.Less(bestKey, k) {
 			best, bestKey, ok = v, k, true
@@ -62,7 +62,7 @@ func (s Seq[T]) MaxBy[K cmp.Ordered](key func(T) K) (T, bool) {
 func Min[T cmp.Ordered](s Seq[T]) (T, bool) {
 	var best T
 	ok := false
-	for v := range s.iter() {
+	for v := range s.seq {
 		if !ok || cmp.Less(v, best) {
 			best, ok = v, true
 		}
@@ -76,7 +76,7 @@ func (s Seq[T]) MinBy[K cmp.Ordered](key func(T) K) (T, bool) {
 	var best T
 	var bestKey K
 	ok := false
-	for v := range s.iter() {
+	for v := range s.seq {
 		k := key(v)
 		if !ok || cmp.Less(k, bestKey) {
 			best, bestKey, ok = v, k, true

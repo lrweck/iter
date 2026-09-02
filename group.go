@@ -8,7 +8,7 @@ package iter
 func Uniq[T comparable](s Seq[T]) Seq[T] {
 	return From(func(yield func(T) bool) {
 		seen := make(map[T]struct{})
-		for v := range s.iter() {
+		for v := range s.seq {
 			if _, ok := seen[v]; ok {
 				continue
 			}
@@ -24,7 +24,7 @@ func Uniq[T comparable](s Seq[T]) Seq[T] {
 func (s Seq[T]) UniqBy[K comparable](key func(T) K) Seq[T] {
 	return From(func(yield func(T) bool) {
 		seen := make(map[K]struct{})
-		for v := range s.iter() {
+		for v := range s.seq {
 			k := key(v)
 			if _, ok := seen[k]; ok {
 				continue
@@ -41,7 +41,7 @@ func (s Seq[T]) UniqBy[K comparable](key func(T) K) Seq[T] {
 // the buckets.
 func (s Seq[T]) GroupBy[K comparable](f func(T) K) map[K][]T {
 	m := make(map[K][]T)
-	for v := range s.iter() {
+	for v := range s.seq {
 		k := f(v)
 		m[k] = append(m[k], v)
 	}
@@ -52,7 +52,7 @@ func (s Seq[T]) GroupBy[K comparable](f func(T) K) map[K][]T {
 // wins.
 func (s Seq[T]) KeyBy[K comparable](key func(T) K) map[K]T {
 	m := make(map[K]T)
-	for v := range s.iter() {
+	for v := range s.seq {
 		m[key(v)] = v
 	}
 	return m

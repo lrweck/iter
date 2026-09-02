@@ -133,8 +133,11 @@ func (s Seq2[K, V]) Seq() stditer.Seq2[K, V] { return s.seq }
 
 // Count returns the number of pairs.
 func (s Seq2[K, V]) Count() int {
+	if s.seq == nil {
+		return 0
+	}
 	n := 0
-	for range s.iter() {
+	for range s.seq {
 		n++
 	}
 	return n
@@ -321,7 +324,7 @@ func (s Result[V]) Errors() Seq[error] {
 func (s Result[V]) CollectErr() ([]V, error) {
 	var vals []V
 	var errs []error
-	for v, err := range s.iter() {
+	for v, err := range s.seq {
 		if err != nil {
 			errs = append(errs, err)
 			continue
@@ -333,8 +336,11 @@ func (s Result[V]) CollectErr() ([]V, error) {
 
 // Count returns the number of outcome pairs.
 func (s Result[V]) Count() int {
+	if s.seq == nil {
+		return 0
+	}
 	n := 0
-	for range s.iter() {
+	for range s.seq {
 		n++
 	}
 	return n
@@ -346,4 +352,9 @@ func (s Result[V]) Count() int {
 func (s Result[V]) Seq() stditer.Seq2[V, error] { return s.seq }
 
 // ToMap eagerly collects a pair sequence into a map.
-func ToMap[K comparable, V any](s Seq2[K, V]) map[K]V { return maps.Collect(s.iter()) }
+func ToMap[K comparable, V any](s Seq2[K, V]) map[K]V {
+	if s.seq == nil {
+		return nil
+	}
+	return maps.Collect(s.seq)
+}
